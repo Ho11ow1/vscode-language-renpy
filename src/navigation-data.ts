@@ -1196,11 +1196,15 @@ export function getDefaultStoreVariables(): CompletionItem[] {
     const newList: CompletionItem[] = [];
     const addedKeys = new Set<string>();
 
+    // static renpy default stores / namespaces
     const namespaces = [
         { name: "renpy", detail: "Ren'Py methods accessable via python" },
         { name: "persistent", detail: "Ren'Py Persistent Data" },
+        { name: "preferences", detail: "Ren'Py User Preferences" },
         { name: "config", detail: "Ren'Py Configuration Options" },
+        { name: "build", detail: "Ren'Py Build Process Methods" },
         { name: "gui", detail: "Ren'Py GUI Customization Variables" },
+        { name: "bubble", detail: "Ren'Py Speech Bubble Variables" },
     ];
     // Push the default renpy namespaces so users get actual intellisense
     for (const ns of namespaces) {
