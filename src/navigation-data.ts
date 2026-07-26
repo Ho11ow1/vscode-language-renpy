@@ -43,6 +43,16 @@ interface RenpyFunctions {
     renpy: RenpyItem;
 }
 
+export const Namespaces: { name: string; detail: string }[] = [
+    { name: "renpy.", detail: "Ren'Py methods accessable via python" },
+    { name: "persistent.", detail: "Ren'Py Persistent Data" },
+    { name: "preferences.", detail: "Ren'Py User Preferences" },
+    { name: "config.", detail: "Ren'Py Configuration Options" },
+    { name: "build.", detail: "Ren'Py Build Process Methods" },
+    { name: "gui.", detail: "Ren'Py GUI Customization Variables" },
+    { name: "bubble.", detail: "Ren'Py Speech Bubble Variables" },
+] as const;
+
 export class NavigationData {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     static data: any = {};
@@ -1196,21 +1206,12 @@ export function getDefaultStoreVariables(): CompletionItem[] {
     const newList: CompletionItem[] = [];
     const addedKeys = new Set<string>();
 
-    // static renpy default stores / namespaces
-    const namespaces = [
-        { name: "renpy", detail: "Ren'Py methods accessable via python" },
-        { name: "persistent", detail: "Ren'Py Persistent Data" },
-        { name: "preferences", detail: "Ren'Py User Preferences" },
-        { name: "config", detail: "Ren'Py Configuration Options" },
-        { name: "build", detail: "Ren'Py Build Process Methods" },
-        { name: "gui", detail: "Ren'Py GUI Customization Variables" },
-        { name: "bubble", detail: "Ren'Py Speech Bubble Variables" },
-    ];
     // Push the default renpy namespaces so users get actual intellisense
-    for (const ns of namespaces) {
-        if (!addedKeys.has(ns.name)) {
-            addedKeys.add(ns.name);
-            const item = new CompletionItem(ns.name, CompletionItemKind.Module);
+    for (const ns of Namespaces) {
+        const trueName = ns.name.substring(0, ns.name.length - 1);
+        if (!addedKeys.has(trueName)) {
+            addedKeys.add(trueName);
+            const item = new CompletionItem(trueName, CompletionItemKind.Module);
             item.detail = ns.detail;
             newList.push(item);
         }

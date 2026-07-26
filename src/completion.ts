@@ -15,7 +15,7 @@ import {
 import { Displayable } from "./displayable";
 import { getDefinitionFromFile } from "./hover";
 import { getCurrentContext } from "./navigation";
-import { getDefaultStoreVariables, NavigationData } from "./navigation-data";
+import { getDefaultStoreVariables, Namespaces,NavigationData } from "./navigation-data";
 
 export function registerCompletionProvider() {
     return languages.registerCompletionItemProvider(
@@ -59,6 +59,7 @@ export function getCompletionList(document: TextDocument, position: Position, co
             return;
         }
 
+        // Just get immediate stuff
         if (linePrefix.trim().startsWith("$")) {
             // If user typed '$ ' or '$ myVar', get the default store variables
             const defaultVars = getDefaultStoreVariables();
@@ -79,7 +80,8 @@ export function getCompletionList(document: TextDocument, position: Position, co
             return getAutoCompleteList("renpy.music.");
         } else if (linePrefix.endsWith("renpy.audio.")) {
             return getAutoCompleteList("renpy.audio.");
-        } else {
+        } else if (Namespaces.some((ns) => linePrefix.endsWith(ns.name))) {
+            // Specific case for direct namespaces # There's probably a better way but this is what works
             const prefixPosition = new Position(position.line, position.character - 1);
             const range = document.getWordRangeAtPosition(prefixPosition);
             const parentContext = getCurrentContext(document, position);
@@ -88,23 +90,36 @@ export function getCompletionList(document: TextDocument, position: Position, co
                 const parent = document.getText(document.getWordRangeAtPosition(parentPosition));
                 const kwPrefix = document.getText(range);
                 return getAutoCompleteList(kwPrefix, parent, parentContext);
-            } else if (
-                context.triggerCharacter === "-" ||
-                context.triggerCharacter === "@" ||
-                context.triggerCharacter === "=" ||
-                context.triggerCharacter === " "
-            ) {
-                const parentPosition = new Position(position.line, line.length - line.trimStart().length);
-                const parent = document.getText(document.getWordRangeAtPosition(parentPosition));
-                if (parent) {
-                    if (context.triggerCharacter === "=") {
-                        return getAutoCompleteList(parent);
-                    } else {
-                        return getAutoCompleteList(context.triggerCharacter, parent, parentContext);
-                    }
-                }
             }
         }
+        // TODO: HANDLE CUSTOM LOOKUP I.E (RENTALE. | RENTALE.EVENT. | etc...)
+        // else {
+        //     // This section will handle custom stuff i.e. rentale.
+        //     const prefixPosition = new Position(position.line, position.character - 1);
+        //     const range = document.getWordRangeAtPosition(prefixPosition);
+        //     const parentContext = getCurrentContext(document, position);
+        //     if (range) {
+        //         const parentPosition = new Position(position.line, line.length - line.trimStart().length);
+        //         const parent = document.getText(document.getWordRangeAtPosition(parentPosition));
+        //         const kwPrefix = document.getText(range);
+        //         return getAutoCompleteList(kwPrefix, parent, parentContext);
+        //     } else if (
+        //         context.triggerCharacter === "-" ||
+        //         context.triggerCharacter === "@" ||
+        //         context.triggerCharacter === "=" ||
+        //         context.triggerCharacter === " "
+        //     ) {
+        //         const parentPosition = new Position(position.line, line.length - line.trimStart().length);
+        //         const parent = document.getText(document.getWordRangeAtPosition(parentPosition));
+        //         if (parent) {
+        //             if (context.triggerCharacter === "=") {
+        //                 return getAutoCompleteList(parent);
+        //             } else {
+        //                 return getAutoCompleteList(context.triggerCharacter, parent, parentContext);
+        //             }
+        //         }
+        //     }
+        // }
     }
     return undefined;
 }
