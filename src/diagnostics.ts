@@ -61,10 +61,11 @@ const rxReservedPythonCheck =
 const rxObsoleteCheck =
     /[\s(=]+(LiveCrop|LiveComposite|Tooltip|im\.Rotozoom|im\.ImageBase|im\.ramp|im\.Map|im\.Flip|im\.math|im\.expands_bounds|im\.threading|im\.zipfile|im\.Recolor|im\.Color|im\.io|im\.Alpha|im\.Data|im\.Image|im\.Twocolor|im\.MatrixColor|im\.free_memory|im\.Tile|im\.FactorScale|im\.Sepia|im\.Crop|im\.AlphaMask|im\.Blur|im\.tobytes|im\.matrix|im\.Grayscale|ui\.add|ui\.bar|ui\.imagebutton|ui\.input|ui\.key|ui\.label|ui\.null|ui\.text|ui\.textbutton|ui\.timer|ui\.vbar|ui\.hotspot|ui\.hotbar|ui\.spritemanager|ui\.button|ui\.frame|ui\.transform|ui\.window|ui\.drag|ui\.fixed|ui\.grid|ui\.hbox|ui\.side|ui\.vbox|ui\.imagemap|ui\.draggroup)[^a-zA-Z]/g;
 
-const rxVariableCheck = /^\s*(default|define)\s+([^a-zA-Z\s_][a-zA-Z0-9_]*)\s+=/g;
+// Why is this named VariableCheck when it's supposed to check for invalid?
+const rxInvalidVariableCheck = /^\s*(default|define)\s+([^a-zA-Z][a-zA-Z0-9_]*)\s*=/g;
 const rxReservedVariableCheck = /\s*(default|define)\s+(_[a-zA-Z0-9]*)\s+=/g;
 const rxPersistentDefines = /^\s*(default|define)\s+persistent\.([a-zA-Z]+[a-zA-Z0-9_]*)\s*=\s*(.*$)/g;
-const rxPersistentCheck = /\s+persistent\.(\w+)[^a-zA-Z]/g;
+const rxPersistentCheck = /\s+persistent\.(\w+)(?=[\s=]|$)/g;
 const rxStoreCheck = /\s+store\.(\w+)[^a-zA-Z_]?/g;
 const rxTabCheck = /^(\t+)/g;
 const rsComparisonCheck = /\s+(if|while)\s+(\w+)\s*(=)\s*(\w+)\s*/g;
@@ -119,7 +120,7 @@ function refreshDiagnostics(doc: TextDocument, diagnosticCollection: DiagnosticC
 
     //Filenames must begin with a letter or number,
     //and may not begin with "00", as Ren'Py uses such files for its own purposes.
-    const ignoreThisFilename: string = !!doc.lineAt(0).text.match(rxIgnoreThisFilename);
+    const ignoreThisFilename: boolean = !!doc.lineAt(0).text.match(rxIgnoreThisFilename);
     const checkFilenames: string = config.warnOnInvalidFilenameIssues;
     if (checkFilenames.toLowerCase() !== "disabled" && !ignoreThisFilename) {
         let severity = DiagnosticSeverity.Error;
@@ -354,7 +355,7 @@ function checkInvalidVariableNames(diagnostics: Diagnostic[], line: string, line
     // check line for invalid define/default variable names
     // Variables must begin with a letter or number, and may not begin with '_'
     let matches;
-    while ((matches = rxVariableCheck.exec(line)) != null) {
+    while ((matches = rxInvalidVariableCheck.exec(line)) != null) {
         if (!renpyStore.includes(matches[2])) {
             const offset = matches.index + matches[0].indexOf(matches[2]);
             const range = new Range(lineIndex, offset, lineIndex, offset + matches[2].length);
