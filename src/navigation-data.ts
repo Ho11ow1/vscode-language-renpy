@@ -18,7 +18,7 @@ import { cleanUpPath, extractFilenameWithoutExtension, getFileWithPath, getNavig
 import { Character } from "./character";
 import { Displayable } from "./displayable";
 import { getDefinitionFromFile } from "./hover";
-import { LogCategory,logCatMessage, logMessage, logToast } from "./logger";
+import { logMessage, logToast } from "./logger";
 import {
     DataType,
     getBaseTypeFromDefine,
@@ -987,14 +987,9 @@ export class NavigationData {
             const defaults = line.match(rxDefaultDefine);
             if (defaults) {
                 const varName = defaults[2];
-                const rawBaseClass = defaults[3]; // Should be actual resulting type
-                logCatMessage(
-                    LogLevel.Info,
-                    LogCategory.Default,
-                    `[scanDefault] Name: ${varName} | rawBase: ${rawBaseClass} | store: ${currentStore}`
-                );
+                const value = defaults[3]; // Either actual value or rentale.type()
 
-                const datatype = new DataType(varName, defaults[1], rawBaseClass);
+                const datatype = new DataType(varName, defaults[1], value);
                 datatype.checkTypeArray("transitions", transitions);
 
                 NavigationData.gameObjects["define_types"][varName] = datatype;
@@ -1231,6 +1226,17 @@ export function getDefaultStoreVariables(): CompletionItem[] {
             const item = new CompletionItem(trueName, CompletionItemKind.Module);
             item.detail = ns.detail;
             newList.push(item);
+        }
+    }
+
+    // Get init python functions (i.e. GetRPAName)
+    const callables = NavigationData.data.location["callable"];
+    if (callables) {
+        for (const key of Object.keys(callables)) {
+            if (!key.includes(".") && !addedKeys.has(key)) {
+                addedKeys.add(key);
+                newList.push(new CompletionItem(key, CompletionItemKind.Function));
+            }
         }
     }
 

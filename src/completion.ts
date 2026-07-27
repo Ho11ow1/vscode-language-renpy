@@ -6,7 +6,6 @@ import {
     CompletionItemKind,
     CompletionTriggerKind,
     languages,
-    LogLevel,
     Position,
     ProviderResult,
     TextDocument,
@@ -15,7 +14,6 @@ import {
 
 import { Displayable } from "./displayable";
 import { getDefinitionFromFile } from "./hover";
-import { LogCategory, logCatMessage } from "./logger";
 import { getCurrentContext } from "./navigation";
 import { getDefaultStoreVariables, Namespaces, NavigationData } from "./navigation-data";
 
@@ -111,12 +109,6 @@ export function getCompletionList(document: TextDocument, position: Position, co
                 const parent = document.getText(document.getWordRangeAtPosition(parentPosition));
                 const kwPrefix = document.getText(range);
 
-                logCatMessage(
-                    LogLevel.Info,
-                    LogCategory.Default,
-                    `[getCompletionList] line: "${line}" | kwPrefix: "${kwPrefix}" | parent: "${parent}"`
-                );
-
                 return getAutoCompleteList(kwPrefix, parent, parentContext);
             } else if (
                 context.triggerCharacter === "-" ||
@@ -147,8 +139,6 @@ export function getCompletionList(document: TextDocument, position: Position, co
  * @returns A list of CompletionItem objects
  */
 export function getAutoCompleteList(prefix: string, parent = "", context = ""): CompletionItem[] | undefined {
-    logCatMessage(LogLevel.Info, LogCategory.Default, `[getAutoCompleteList IN] prefix: "${prefix}" | parent: "${parent}" | context: "${context}"`);
-
     const newList: CompletionItem[] = [];
     const channels = getAudioChannels();
     const characters = Object.keys(NavigationData.gameObjects["characters"]);
@@ -157,14 +147,11 @@ export function getAutoCompleteList(prefix: string, parent = "", context = ""): 
     const checkTarget = prefix.includes(".") ? prefix.split(".")[0] : prefix;
     const cleanVar = checkTarget.replace(/^\$\s*/, "").trim();
 
-    // Defined Python Variable Instances (i.e., $ II_Wine_Red. or $ E_City_Unlock_All.)
-    // Only intercepts if cleanVar actually exists as a variable in define_types
+    // Defined Python Variable Instances (e.g., $ II_Wine_Red. or $ E_City_Unlock_All.)
     const defType = NavigationData.gameObjects["define_types"]?.[cleanVar];
     if (defType && defType.type) {
         let targetType = defType.type || defType.baseClass || "";
-        targetType = targetType.split("(")[0].trim(); // Clean off constructor params
-
-        logCatMessage(LogLevel.Info, LogCategory.Default, `[getAutoCompleteList] Variable match: '${cleanVar}' -> type: '${targetType}'`);
+        targetType = targetType.split("(")[0].trim();
 
         const normalized = normalizeTypeName(targetType);
 
@@ -180,6 +167,13 @@ export function getAutoCompleteList(prefix: string, parent = "", context = ""): 
                 return classMembers;
             }
         }
+    }
+
+    // Custom sub-stores / modules (e.g., $ rentale. or rentale.)
+    if (isNamedStore(prefix) || isNamedStore(cleanVar)) {
+        const storeTarget = isNamedStore(prefix) ? prefix : cleanVar;
+
+        return getNamedStoreAutoComplete(storeTarget);
     }
 
     // Audio and Music namespaces
@@ -205,23 +199,14 @@ export function getAutoCompleteList(prefix: string, parent = "", context = ""): 
         for (const key in directObjects) {
             newList.push(new CompletionItem(key, CompletionItemKind.Value));
         }
-        // Shouldn't have to do this but going through callables just fails so this it is
         newList.push(new CompletionItem("_clear", CompletionItemKind.Method));
         newList.push(new CompletionItem("_hasattr", CompletionItemKind.Method));
-
         return newList;
     }
 
     // Ren'Py default store variables
     else if (prefix === "store") {
         return getDefaultStoreVariables();
-    }
-
-    // Custom sub-stores / modules (e.g. $ rentale. or store.rentale.)
-    else if (isNamedStore(prefix) || isNamedStore(cleanVar)) {
-        const storeTarget = isNamedStore(prefix) ? prefix : cleanVar;
-        logCatMessage(LogLevel.Info, LogCategory.Default, `[getAutoCompleteList] Store match for: '${storeTarget}'`);
-        return getNamedStoreAutoComplete(storeTarget);
     }
 
     // Audio channels (e.g., play music ..., stop sound)
@@ -775,22 +760,6 @@ function getNamedStoreAutoComplete(keyword: string): CompletionItem[] | undefine
     return newList;
 }
 
-// function isPythonType(keyword: string): boolean {
-//     const cleanKeyword = keyword
-//         .replace(/^\$\s*/, "")
-//         .split(".")[0]
-//         .trim(); // Probably unnecessary but we do it because type keeps being rentale.
-
-//     const defaults = NavigationData.gameObjects["define_types"];
-//     if (defaults) {
-//         const defType = defaults[cleanKeyword];
-//         if (defType) {
-//             return defType.type !== "";
-//         }
-//     }
-//     return false;
-// }
-
 // Complete Built-in Python methods by data type
 // Probably not the correct way but it gives something so it's ok for now
 const PYTHON_BUILTIN_METHODS: Record<string, string[]> = {
@@ -906,7 +875,6 @@ export function getClassMemberCompletions(className: string): CompletionItem[] {
 
     let cleanClassName = className.startsWith("store.") ? className.substring(6) : className;
     cleanClassName = cleanClassName.replace(/\(.*\)$/, "").trim();
-    logCatMessage(LogLevel.Info, LogCategory.Default, `getClassMemberCompletions requested for: ${className} | Cleaned: ${cleanClassName}`);
     const dotPrefixes = [`${cleanClassName}.`, `store.${cleanClassName}.`];
 
     // Fetch class methods from callables (excluding dunder methods)
