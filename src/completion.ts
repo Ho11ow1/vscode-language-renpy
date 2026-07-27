@@ -77,6 +77,10 @@ export function getCompletionList(document: TextDocument, position: Position, co
             return NavigationData.configAutoComplete;
         } else if (linePrefix.endsWith("gui.")) {
             return NavigationData.guiAutoComplete;
+        } else if (linePrefix.endsWith("preferences.")) {
+            return NavigationData.preferencesAutoComplete;
+        } else if (linePrefix.endsWith("bubble.")) {
+            return NavigationData.bubbleAutoComplete;
         } else if (linePrefix.endsWith("renpy.music.")) {
             return getAutoCompleteList("renpy.music.");
         } else if (linePrefix.endsWith("renpy.audio.")) {

@@ -63,6 +63,8 @@ export class NavigationData {
     static configAutoComplete: CompletionItem[];
     static guiAutoComplete: CompletionItem[];
     static internalAutoComplete: CompletionItem[];
+    static preferencesAutoComplete: CompletionItem[];
+    static bubbleAutoComplete: CompletionItem[];
     static displayableAutoComplete: CompletionItem[];
     static displayableQuotedAutoComplete: CompletionItem[];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -81,25 +83,26 @@ export class NavigationData {
         const completionItem = new CompletionItem(name, undefined);
         completionItem.documentation = new MarkdownString(doc);
 
-        if (accessKind === "var") {
-            completionItem.kind = CompletionItemKind.Field;
+        // Correct if's so that preferences & bubble actually show vars and not methods
+        if (kind === "var" || accessKind === "var") {
+            completionItem.kind = CompletionItemKind.Variable;
         } else if (kind === "class" || accessKind === "class") {
             completionItem.kind = CompletionItemKind.Class;
-        } else if (accessKind === "exception") {
+        } else if (kind === "exception" || accessKind === "exception") {
             completionItem.kind = CompletionItemKind.Issue;
         } else if (storage === "basefile") {
             completionItem.kind = CompletionItemKind.Field;
-        } else if (accessKind === "attribute") {
+        } else if (kind === "attribute" || accessKind === "attribute") {
             completionItem.kind = CompletionItemKind.Property;
         } else if (storage === "audio") {
             completionItem.kind = CompletionItemKind.Method;
-        } else if (accessKind === "ui") {
+        } else if (kind === "ui" || accessKind === "ui") {
             completionItem.kind = CompletionItemKind.Event;
         } else if (kind === "image") {
             completionItem.kind = CompletionItemKind.Constant;
         } else if (kind === "function" || accessKind === "function") {
             completionItem.kind = CompletionItemKind.Function;
-        } else if (accessKind === "method") {
+        } else if (kind === "method" || accessKind === "method") {
             completionItem.kind = CompletionItemKind.Method;
         } else {
             console.error("Unhandled kind: " + kind);
@@ -143,15 +146,23 @@ export class NavigationData {
         }
 
         NavigationData.guiAutoComplete = [];
+        NavigationData.preferencesAutoComplete = [];
+        NavigationData.bubbleAutoComplete = [];
         NavigationData.internalAutoComplete = [];
         for (const [key, value] of Object.entries(NavigationData.renpyFunctions.internal)) {
             if (typeof value === "string") {
                 continue;
             }
 
-            NavigationData.internalAutoComplete.push(NavigationData.makeCompletionItem(key, value));
+            const item = NavigationData.makeCompletionItem(key, value);
+            NavigationData.internalAutoComplete.push(item);
+
             if (key.startsWith("gui.")) {
                 NavigationData.guiAutoComplete.push(NavigationData.makeCompletionItem(key.substring(4), value));
+            } else if (key.startsWith("preferences.")) {
+                NavigationData.preferencesAutoComplete.push(NavigationData.makeCompletionItem(key.substring(12), value));
+            } else if (key.startsWith("bubble.")) {
+                NavigationData.bubbleAutoComplete.push(NavigationData.makeCompletionItem(key.substring(7), value));
             }
         }
 
