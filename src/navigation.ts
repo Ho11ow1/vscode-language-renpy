@@ -44,9 +44,10 @@ export class DataType {
         this.variable = variable;
         this.define = define;
         this.baseClass = baseClass;
-        this.type = "";
 
-        const cleanBase = baseClass.replace(/\(.*\)$/, "").trim();
+        // Remove parameters from baseClass e.g. "rentale.Event(name=...)" -> "rentale.Event"
+        let cleanBase = baseClass.split("(")[0].trim();
+        cleanBase = cleanBase.replace(/['"`{\]]/g, "").trim();
 
         if (baseClass === "True" || baseClass === "False" || cleanBase === "bool") {
             this.type = "bool";
@@ -165,7 +166,8 @@ export function getPyDocsFromTextDocumentAtLine(document: TextDocument, line: nu
 }
 
 export function getBaseTypeFromDefine(keyword: string, line: string): string | undefined {
-    const rx = /^(default|define)\s+(\w*)\s*=\s*(\w*)\(/;
+    // Stop ignoring the . so we actually get the full custom type
+    const rx = /^(default|define)\s+([a-zA-Z0-9_]+)\s*=\s*([a-zA-Z0-9_]+)\s*\(/;
     const trimmedLine = line.trim();
     const matches = trimmedLine.match(rx);
     if (matches && matches.length >= 4) {

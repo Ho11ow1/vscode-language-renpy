@@ -18,7 +18,7 @@ import { cleanUpPath, extractFilenameWithoutExtension, getFileWithPath, getNavig
 import { Character } from "./character";
 import { Displayable } from "./displayable";
 import { getDefinitionFromFile } from "./hover";
-import { logMessage, logToast } from "./logger";
+import { LogCategory,logCatMessage, logMessage, logToast } from "./logger";
 import {
     DataType,
     getBaseTypeFromDefine,
@@ -851,7 +851,8 @@ export class NavigationData {
         const rxDisplayable = /^\s*(image)\s+([^=.]*)\s*[=]\s*(.+)|(layeredimage)\s+(.+):|(image)\s+([^=.:]*)\s*:/;
         const rxChannels = /.*renpy.(audio|music).register_channel\s*\(\s*"(\w+)"(.*)/;
         const rxPersistent = /^\s*(default|define)\s+persistent\.([a-zA-Z]+[a-zA-Z0-9_]*)\s*=\s*(.*$)/;
-        const rxDefaultDefine = /^(default|define)\s+([a-zA-Z0-9._]+)\s*=\s*([\w'"`[{]*)/;
+        // Updated to handle leading spaces (\s*) and captures class constructors like "rentale.Event("
+        const rxDefaultDefine = /^\s*(default|define)\s+([a-zA-Z0-9._]+)\s*=\s*([a-zA-Z0-9._]+)/;
         const rxCharacters = /^\s*(define)\s*(\w*)\s*=\s*(Character|DynamicCharacter)\s*\((.*)/;
         const rxStatements = /.*renpy.register_statement\s*\("(\w+)"(.*)\)/;
         const rxOutlines = /[\s_]*outlines\s+(\[.*\])/;
@@ -860,6 +861,7 @@ export class NavigationData {
         const internal = NavigationData.renpyFunctions.internal;
         const transitions = Object.keys(internal).filter((key) => internal[key][0] === "transitions");
 
+        let currentStore = "";
         for (let i = 0; i < document.lineCount; ++i) {
             let line = document.lineAt(i).text;
 
@@ -883,6 +885,17 @@ export class NavigationData {
                 continue;
             }
 
+            const stores = line.match(rxInitStore);
+            if (stores) {
+                currentStore = stores[4] || stores[3] || "";
+                NavigationData.gameObjects["stores"][currentStore] = [filename, i + 1];
+                const datatype = new DataType(currentStore, "default", "store");
+                NavigationData.gameObjects["define_types"][currentStore] = datatype;
+                continue;
+            } else if ((line.trim().startsWith("python ") || line.trim().startsWith("init ")) && !line.includes(" in ")) {
+                currentStore = ""; // Reset store context if outside a named store block
+            }
+
             // match class definitions
             const matches = line.match(rxClass);
             if (matches) {
@@ -891,17 +904,26 @@ export class NavigationData {
                 if (base) {
                     base = base.replace(/\(/g, "").replace(/\)/g, "").trim();
                 }
-                const nav = new Navigation("class", match, filename, i + 1, "", "", base);
-                NavigationData.data.location["class"][match] = nav;
+                const fullClassName = currentStore ? `${currentStore}.${match}` : match;
+
+                const nav = new Navigation("class", fullClassName, filename, i + 1, "", "", base);
+                NavigationData.data.location["class"][fullClassName] = nav;
+
                 const properties = NavigationData.getClassProperties(match, document, i + 1);
                 if (properties) {
-                    NavigationData.gameObjects["properties"][match] = properties;
+                    NavigationData.gameObjects["properties"][fullClassName] = properties;
                 }
-                const initData = NavigationData.data.location["callable"][`${match}.__init__`];
+
+                // Look up __init__ callable under full name, store.full name, or bare name
+                const initData =
+                    NavigationData.data.location["callable"][`${fullClassName}.__init__`] ||
+                    NavigationData.data.location["callable"][`store.${fullClassName}.__init__`] ||
+                    NavigationData.data.location["callable"][`${match}.__init__`];
+
                 if (initData && initData[0] === gameFilename) {
                     const fields = NavigationData.getClassFields(match, document, initData[1]);
                     if (fields) {
-                        NavigationData.gameObjects["fields"][match] = fields;
+                        NavigationData.gameObjects["fields"][fullClassName] = fields;
                     }
                 }
                 continue;
@@ -964,24 +986,19 @@ export class NavigationData {
             // match default/defines
             const defaults = line.match(rxDefaultDefine);
             if (defaults) {
-                const datatype = new DataType(defaults[2], defaults[1], defaults[3]);
+                const varName = defaults[2];
+                const rawBaseClass = defaults[3]; // Should be actual resulting type
+                logCatMessage(
+                    LogLevel.Info,
+                    LogCategory.Default,
+                    `[scanDefault] Name: ${varName} | rawBase: ${rawBaseClass} | store: ${currentStore}`
+                );
+
+                const datatype = new DataType(varName, defaults[1], rawBaseClass);
                 datatype.checkTypeArray("transitions", transitions);
-                NavigationData.gameObjects["define_types"][defaults[2]] = datatype;
-                updateNavigationData("define", defaults[2], filename, i);
-            }
-            // match stores
-            const stores = line.match(rxInitStore);
-            if (stores) {
-                let match = "";
-                if (stores[4] != null) {
-                    match = stores[4];
-                } else {
-                    match = stores[3];
-                }
-                NavigationData.gameObjects["stores"][match] = [filename, i + 1];
-                const datatype = new DataType(stores[3], "default", "store");
-                NavigationData.gameObjects["define_types"][match] = datatype;
-                continue;
+
+                NavigationData.gameObjects["define_types"][varName] = datatype;
+                updateNavigationData("define", varName, filename, i);
             }
             // match characters
             const characters = line.match(rxCharacters);
@@ -1217,11 +1234,21 @@ export function getDefaultStoreVariables(): CompletionItem[] {
         }
     }
 
-    // Get all variables tracked in define_types (both 'define' and 'default')
+    // Get top-level global classes (i.e. Discord)
+    const classes = NavigationData.data.location["class"];
+    if (classes) {
+        for (const key of Object.keys(classes)) {
+            if (!key.includes(".") && !addedKeys.has(key)) {
+                addedKeys.add(key);
+                newList.push(new CompletionItem(key, CompletionItemKind.Class));
+            }
+        }
+    }
+
+    // Get all variables tracked in define_types (both "define" and "default")
     const defaults = NavigationData.gameObjects["define_types"];
     if (defaults) {
         for (const key of Object.keys(defaults)) {
-            // Exclude keys that explicitly belong to sub-stores (contain dots) # Kind of temporary but not really, works for the current approach non the less
             if (!key.includes(".")) {
                 addedKeys.add(key);
                 newList.push(new CompletionItem(key, CompletionItemKind.Variable));
@@ -1233,7 +1260,6 @@ export function getDefaultStoreVariables(): CompletionItem[] {
     const defines = NavigationData.data.location["define"];
     if (defines) {
         for (const key of Object.keys(defines)) {
-            // Filter out internal/sub-store prefixes like 'audio.' or named stores # Kind of temporary but not really, works for the current approach non the less
             if (!key.includes(".") && !addedKeys.has(key)) {
                 addedKeys.add(key);
                 newList.push(new CompletionItem(key, CompletionItemKind.Variable));

@@ -6,6 +6,7 @@ import {
     CompletionItemKind,
     CompletionTriggerKind,
     languages,
+    LogLevel,
     Position,
     ProviderResult,
     TextDocument,
@@ -14,8 +15,9 @@ import {
 
 import { Displayable } from "./displayable";
 import { getDefinitionFromFile } from "./hover";
+import { LogCategory,logCatMessage } from "./logger";
 import { getCurrentContext } from "./navigation";
-import { getDefaultStoreVariables, Namespaces,NavigationData } from "./navigation-data";
+import { getDefaultStoreVariables, Namespaces, NavigationData } from "./navigation-data";
 
 export function registerCompletionProvider() {
     return languages.registerCompletionItemProvider(
@@ -59,7 +61,7 @@ export function getCompletionList(document: TextDocument, position: Position, co
             return;
         }
 
-        // Just get immediate stuff
+        // Immediate intellisense
         if (linePrefix.trim().startsWith("$")) {
             // If user typed '$ ' or '$ myVar', get the default store variables
             const defaultVars = getDefaultStoreVariables();
@@ -70,6 +72,7 @@ export function getCompletionList(document: TextDocument, position: Position, co
                 return defaultVars;
             }
         }
+        // Anything specific which we already have static knowledge of
         if (linePrefix.endsWith("renpy.")) {
             return NavigationData.renpyAutoComplete;
         } else if (linePrefix.endsWith("config.")) {
@@ -80,6 +83,7 @@ export function getCompletionList(document: TextDocument, position: Position, co
             return getAutoCompleteList("renpy.music.");
         } else if (linePrefix.endsWith("renpy.audio.")) {
             return getAutoCompleteList("renpy.audio.");
+            // More in depth global level namespaces
         } else if (Namespaces.some((ns) => linePrefix.endsWith(ns.name))) {
             // Specific case for direct namespaces # There's probably a better way but this is what works
             const prefixPosition = new Position(position.line, position.character - 1);
@@ -92,34 +96,45 @@ export function getCompletionList(document: TextDocument, position: Position, co
                 return getAutoCompleteList(kwPrefix, parent, parentContext);
             }
         }
-        // TODO: HANDLE CUSTOM LOOKUP I.E (RENTALE. | RENTALE.EVENT. | etc...)
-        // else {
-        //     // This section will handle custom stuff i.e. rentale.
-        //     const prefixPosition = new Position(position.line, position.character - 1);
-        //     const range = document.getWordRangeAtPosition(prefixPosition);
-        //     const parentContext = getCurrentContext(document, position);
-        //     if (range) {
-        //         const parentPosition = new Position(position.line, line.length - line.trimStart().length);
-        //         const parent = document.getText(document.getWordRangeAtPosition(parentPosition));
-        //         const kwPrefix = document.getText(range);
-        //         return getAutoCompleteList(kwPrefix, parent, parentContext);
-        //     } else if (
-        //         context.triggerCharacter === "-" ||
-        //         context.triggerCharacter === "@" ||
-        //         context.triggerCharacter === "=" ||
-        //         context.triggerCharacter === " "
-        //     ) {
-        //         const parentPosition = new Position(position.line, line.length - line.trimStart().length);
-        //         const parent = document.getText(document.getWordRangeAtPosition(parentPosition));
-        //         if (parent) {
-        //             if (context.triggerCharacter === "=") {
-        //                 return getAutoCompleteList(parent);
-        //             } else {
-        //                 return getAutoCompleteList(context.triggerCharacter, parent, parentContext);
-        //             }
-        //         }
-        //     }
-        // }
+        // This part will have to handle:
+        // - rentale. lookup (i.e. rentale.(Show immediate rentale callables & variables + classes found under rentale.))
+        // - Character.field lookup (i.e. Jessica.(Show Jessica callables, fields(class level and self)))
+        // - Class. lookup (i.e. Discord.(Show Discord callables, fields(Class level and self)))
+        // Fallback for custom lookups (stores, characters, classes, Python types, and context triggers)
+        else {
+            const prefixPosition = new Position(position.line, position.character - 1);
+            const range = document.getWordRangeAtPosition(prefixPosition);
+            const parentContext = getCurrentContext(document, position);
+
+            if (range) {
+                const parentPosition = new Position(position.line, line.length - line.trimStart().length);
+                const parent = document.getText(document.getWordRangeAtPosition(parentPosition));
+                const kwPrefix = document.getText(range);
+
+                logCatMessage(
+                    LogLevel.Info,
+                    LogCategory.Default,
+                    `[getCompletionList] line: "${line}" | kwPrefix: "${kwPrefix}" | parent: "${parent}"`
+                );
+
+                return getAutoCompleteList(kwPrefix, parent, parentContext);
+            } else if (
+                context.triggerCharacter === "-" ||
+                context.triggerCharacter === "@" ||
+                context.triggerCharacter === "=" ||
+                context.triggerCharacter === " "
+            ) {
+                const parentPosition = new Position(position.line, line.length - line.trimStart().length);
+                const parent = document.getText(document.getWordRangeAtPosition(parentPosition));
+                if (parent) {
+                    if (context.triggerCharacter === "=") {
+                        return getAutoCompleteList(parent);
+                    } else {
+                        return getAutoCompleteList(context.triggerCharacter, parent, parentContext);
+                    }
+                }
+            }
+        }
     }
     return undefined;
 }
@@ -132,6 +147,25 @@ export function getCompletionList(document: TextDocument, position: Position, co
  * @returns A list of CompletionItem objects
  */
 export function getAutoCompleteList(prefix: string, parent = "", context = ""): CompletionItem[] | undefined {
+    logCatMessage(LogLevel.Info, LogCategory.Default, `[getAutoCompleteList] ENTRY prefix: "${prefix}" | parent: "${parent}"`);
+
+    // 0. Check if prefix (or parent) is a defined Python variable instance
+    const checkTarget = prefix.includes(".") ? prefix.split(".")[0] : prefix;
+    const cleanVar = checkTarget.replace(/^\$\s*/, "").trim();
+
+    if (NavigationData.gameObjects["define_types"]?.[cleanVar]) {
+        const defType = NavigationData.gameObjects["define_types"][cleanVar];
+        const targetType = defType.type || defType.baseClass;
+        logCatMessage(LogLevel.Info, LogCategory.Default, `[getAutoCompleteList] Variable match: '${cleanVar}' -> type: '${targetType}'`);
+
+        if (targetType) {
+            const classMembers = getClassMemberCompletions(targetType);
+            if (classMembers.length > 0) {
+                return classMembers;
+            }
+        }
+    }
+
     const newList: CompletionItem[] = [];
     const channels = getAudioChannels();
     const characters = Object.keys(NavigationData.gameObjects["characters"]);
@@ -154,11 +188,16 @@ export function getAutoCompleteList(prefix: string, parent = "", context = ""): 
     }
 
     //  Persistent store variables
+    // If this doesn't exist and we just go through immedia isNamedStore then we will only get the 2 persistent methods so do everything here i guess
     else if (prefix === "persistent") {
-        const gameObjects = NavigationData.data.location["persistent"];
-        for (const key in gameObjects) {
+        const directObjects = NavigationData.data.location["persistent"];
+        for (const key in directObjects) {
             newList.push(new CompletionItem(key, CompletionItemKind.Value));
         }
+        // Shouldn't have to do this but going through callables just fails so this it is
+        newList.push(new CompletionItem("_clear", CompletionItemKind.Method));
+        newList.push(new CompletionItem("_hasattr", CompletionItemKind.Method));
+
         return newList;
     }
 
@@ -190,9 +229,43 @@ export function getAutoCompleteList(prefix: string, parent = "", context = ""): 
         }
     }
 
+    // Defined Python variables and instances
+    else if (isPythonType(prefix)) {
+        const cleanPrefix = prefix
+            .replace(/^\$\s*/, "")
+            .split(".")[0]
+            .trim();
+        logCatMessage(LogLevel.Info, LogCategory.Default, `prefix: ${prefix} | cleaned: ${cleanPrefix}`);
+
+        const defType = NavigationData.gameObjects["define_types"]?.[cleanPrefix];
+        if (defType) {
+            let rawType = defType.type || defType.baseClass || "";
+            rawType = rawType.split("(")[0].trim();
+
+            logCatMessage(LogLevel.Info, LogCategory.Default, `Found defType for '${cleanPrefix}': rawType = '${rawType}'`);
+
+            const normalized = normalizeTypeName(rawType);
+
+            // Check if it's a standard built-in Python type (str, list, dict, int, etc.)
+            if (PYTHON_BUILTIN_METHODS[normalized]) {
+                return getBuiltinPythonMethods(normalized);
+            }
+
+            // Check if it's an instance of a user-defined class
+            if (rawType) {
+                const classMembers = getClassMemberCompletions(rawType);
+                if (classMembers.length > 0) {
+                    return classMembers;
+                }
+            }
+
+            return [];
+        }
+    }
+
     // Custom sub-stores (e.g. rentale.)
     else if (isNamedStore(prefix)) {
-        return getNamedStoreAutoComplete(prefix); // This is currently borked and thus will have to be overridden or just the general detection
+        return getNamedStoreAutoComplete(prefix);
     }
 
     // Callable containers (Ren'Py internal modules/functions)
@@ -214,31 +287,6 @@ export function getAutoCompleteList(prefix: string, parent = "", context = ""): 
             }
         }
         return newList;
-    }
-
-    // Defined Python variables and instances
-    else if (isPythonType(prefix)) {
-        const defType = NavigationData.gameObjects["define_types"][prefix];
-        if (defType) {
-            const rawType = defType.type || defType.baseClass || "";
-            const normalized = normalizeTypeName(rawType);
-
-            // Check if it's a standard built-in Python type (str, list, dict, int, etc.)
-            if (PYTHON_BUILTIN_METHODS[normalized]) {
-                return getBuiltinPythonMethods(normalized);
-            }
-
-            // Check if it's an instance of a user-defined class
-            if (rawType) {
-                const classMembers = getClassMemberCompletions(rawType);
-                if (classMembers.length > 0) {
-                    return classMembers;
-                }
-            }
-
-            // Fallback to legacy keyword search
-            return getAutoCompleteKeywords(defType.type, "", "python");
-        }
     }
 
     // General keyword auto-complete fallback
@@ -683,35 +731,80 @@ function isNamedStore(keyword: string): boolean {
 }
 
 function getNamedStoreAutoComplete(keyword: string): CompletionItem[] | undefined {
-    const newlist: CompletionItem[] = [];
+    const newList: CompletionItem[] = [];
+    const addedLabels = new Set<string>();
+    const dotPrefix = `${keyword}.`;
 
-    // get the list of callables
-    const callables = getCallableAutoComplete(keyword);
-    if (callables) {
-        for (const callable of callables) {
-            newlist.push(callable);
-        }
-    }
-
-    const objKey = `store.${keyword}`;
-    if (NavigationData.gameObjects["fields"][objKey] != null) {
-        const fields = NavigationData.gameObjects["fields"][objKey];
-        for (const field of fields) {
-            const split = field.keyword.split(".");
-            if (split.length === 2) {
-                const label = split[1];
-                newlist.push(new CompletionItem(label, CompletionItemKind.Variable));
+    // Collect direct variables defined in this store (i.e. default rentale.II_Wine_Red = rentale.InventoryItem()))
+    const defines = NavigationData.data?.location?.["define"];
+    if (defines) {
+        for (const key of Object.keys(defines)) {
+            const cleanKey = key.startsWith("store.") ? key.substring(6) : key;
+            if (cleanKey.startsWith(dotPrefix)) {
+                const varName = cleanKey.substring(dotPrefix.length);
+                // Ensure we only grab direct variables, not deeper nested dots
+                if (varName && !varName.includes(".") && !addedLabels.has(varName)) {
+                    addedLabels.add(varName);
+                    newList.push(new CompletionItem(varName, CompletionItemKind.Variable));
+                }
             }
         }
     }
 
-    return newlist;
+    const defineTypes = NavigationData.gameObjects?.["define_types"];
+    if (defineTypes) {
+        for (const key of Object.keys(defineTypes)) {
+            const cleanKey = key.startsWith("store.") ? key.substring(6) : key;
+            if (cleanKey.startsWith(dotPrefix)) {
+                const varName = cleanKey.substring(dotPrefix.length);
+                if (varName && !varName.includes(".") && !addedLabels.has(varName)) {
+                    addedLabels.add(varName);
+                    newList.push(new CompletionItem(varName, CompletionItemKind.Variable));
+                }
+            }
+        }
+    }
+
+    // Collect callables (functions & classes) registered in location["callable"]
+    const callables = NavigationData.data?.location?.["callable"];
+    if (callables) {
+        for (const key of Object.keys(callables)) {
+            const cleanKey = key.startsWith("store.") ? key.substring(6) : key;
+            if (cleanKey.startsWith(dotPrefix)) {
+                const remainder = cleanKey.substring(dotPrefix.length);
+                const parts = remainder.split(".");
+
+                if (parts.length === 1) {
+                    // Direct function (ie.e rentale.go_to)
+                    const funcName = parts[0];
+                    if (!funcName.startsWith("__") && !addedLabels.has(funcName)) {
+                        addedLabels.add(funcName);
+                        newList.push(new CompletionItem(funcName, CompletionItemKind.Function));
+                    }
+                } else if (parts.length > 1) {
+                    // Method/class child (i.e. rentale.inventory.contains)
+                    const className = parts[0];
+                    if (!addedLabels.has(className)) {
+                        addedLabels.add(className);
+                        newList.push(new CompletionItem(className, CompletionItemKind.Class));
+                    }
+                }
+            }
+        }
+    }
+
+    return newList;
 }
 
 function isPythonType(keyword: string): boolean {
+    const cleanKeyword = keyword
+        .replace(/^\$\s*/, "")
+        .split(".")[0]
+        .trim(); // Probably unnecessary but we do it because type keeps being rentale.
+
     const defaults = NavigationData.gameObjects["define_types"];
     if (defaults) {
-        const defType = defaults[keyword];
+        const defType = defaults[cleanKeyword];
         if (defType) {
             return defType.type !== "";
         }
@@ -831,34 +924,53 @@ function getBuiltinPythonMethods(type: string): CompletionItem[] {
 export function getClassMemberCompletions(className: string): CompletionItem[] {
     const newList: CompletionItem[] = [];
     const addedLabels = new Set<string>();
-    const prefix = `${className}.`;
+
+    let cleanClassName = className.startsWith("store.") ? className.substring(6) : className;
+    cleanClassName = cleanClassName.replace(/\(.*\)$/, "").trim();
+    logCatMessage(LogLevel.Info, LogCategory.Default, `getClassMemberCompletions requested for: ${className} | Cleaned: ${cleanClassName}`);
+    const dotPrefixes = [`${cleanClassName}.`, `store.${cleanClassName}.`];
 
     // Fetch class methods from callables (excluding dunder methods)
     const callables = NavigationData.data.location?.["callable"];
     if (callables) {
         for (const key of Object.keys(callables)) {
-            if (key.startsWith(prefix)) {
-                const methodName = key.substring(prefix.length);
-                if (methodName === "__init__" || methodName === "__call__") {
-                    continue;
-                }
-                if (!addedLabels.has(methodName)) {
-                    addedLabels.add(methodName);
-                    newList.push(new CompletionItem(methodName, CompletionItemKind.Method));
+            for (const dotPrefix of dotPrefixes) {
+                if (key.startsWith(dotPrefix)) {
+                    const remainder = key.substring(dotPrefix.length);
+                    const parts = remainder.split(".");
+
+                    // Only take direct methods on the class (ignore nested inner callables)
+                    if (parts.length === 1) {
+                        const methodName = parts[0];
+                        if (methodName && !methodName.startsWith("__") && !addedLabels.has(methodName)) {
+                            addedLabels.add(methodName);
+                            newList.push(new CompletionItem(methodName, CompletionItemKind.Method));
+                        }
+                    }
+                    break;
                 }
             }
         }
     }
 
-    // Fetch class fields created via `self` (e.g. self.quantity = 0)
-    const fields = NavigationData.gameObjects?.["fields"]?.[className] || NavigationData.gameObjects?.["fields"]?.[`store.${className}`];
-    if (fields && Array.isArray(fields)) {
-        for (const field of fields) {
-            const fieldName = typeof field === "string" ? field.split(".").pop() : field.keyword?.split(".").pop();
+    const shortClassName = cleanClassName.split(".").pop() || cleanClassName;
+    const fieldSources = [
+        NavigationData.gameObjects?.["fields"]?.[cleanClassName],
+        NavigationData.gameObjects?.["fields"]?.[`store.${cleanClassName}`],
+        NavigationData.gameObjects?.["fields"]?.[shortClassName],
+    ];
 
-            if (fieldName && !fieldName.startsWith("__") && !addedLabels.has(fieldName)) {
-                addedLabels.add(fieldName);
-                newList.push(new CompletionItem(fieldName, CompletionItemKind.Field));
+    for (const fields of fieldSources) {
+        if (fields && Array.isArray(fields)) {
+            for (const field of fields) {
+                const rawKw = typeof field === "string" ? field : field.keyword;
+                if (rawKw) {
+                    const fieldName = rawKw.split(".").pop();
+                    if (fieldName && !fieldName.startsWith("__") && !addedLabels.has(fieldName)) {
+                        addedLabels.add(fieldName);
+                        newList.push(new CompletionItem(fieldName, CompletionItemKind.Field));
+                    }
+                }
             }
         }
     }
