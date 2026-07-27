@@ -15,7 +15,7 @@ import {
 import { Displayable } from "./displayable";
 import { getDefinitionFromFile } from "./hover";
 import { getCurrentContext } from "./navigation";
-import { getDefaultStoreVariables, Namespaces, NavigationData } from "./navigation-data";
+import { getDefaultStoreVariables, NavigationData } from "./navigation-data";
 
 export function registerCompletionProvider() {
     return languages.registerCompletionItemProvider(
@@ -81,20 +81,22 @@ export function getCompletionList(document: TextDocument, position: Position, co
             return NavigationData.preferencesAutoComplete;
         } else if (linePrefix.endsWith("bubble.")) {
             return NavigationData.bubbleAutoComplete;
+        } else if (linePrefix.endsWith("build.")) {
+            return NavigationData.buildAutoComplete;
         } else if (linePrefix.endsWith("renpy.music.")) {
             return getAutoCompleteList("renpy.music.");
         } else if (linePrefix.endsWith("renpy.audio.")) {
             return getAutoCompleteList("renpy.audio.");
-            // More in depth global level namespaces
-        } else if (Namespaces.some((ns) => linePrefix.endsWith(ns.name))) {
-            // Specific case for direct namespaces # There's probably a better way but this is what works
+        } else if (linePrefix.endsWith("persistent.")) {
             const prefixPosition = new Position(position.line, position.character - 1);
             const range = document.getWordRangeAtPosition(prefixPosition);
             const parentContext = getCurrentContext(document, position);
+
             if (range) {
                 const parentPosition = new Position(position.line, line.length - line.trimStart().length);
                 const parent = document.getText(document.getWordRangeAtPosition(parentPosition));
                 const kwPrefix = document.getText(range);
+
                 return getAutoCompleteList(kwPrefix, parent, parentContext);
             }
         }

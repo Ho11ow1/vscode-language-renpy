@@ -43,14 +43,14 @@ interface RenpyFunctions {
     renpy: RenpyItem;
 }
 
-export const Namespaces: { name: string; detail: string }[] = [
-    { name: "renpy.", detail: "Ren'Py methods accessable via python" },
-    { name: "persistent.", detail: "Ren'Py Persistent Data" },
-    { name: "preferences.", detail: "Ren'Py User Preferences" },
-    { name: "config.", detail: "Ren'Py Configuration Options" },
-    { name: "build.", detail: "Ren'Py Build Process Methods" },
-    { name: "gui.", detail: "Ren'Py GUI Customization Variables" },
-    { name: "bubble.", detail: "Ren'Py Speech Bubble Variables" },
+const Namespaces: { name: string; detail: string }[] = [
+    { name: "renpy", detail: "Ren'Py methods accessable via python" },
+    { name: "persistent", detail: "Ren'Py Persistent Data" },
+    { name: "preferences", detail: "Ren'Py User Preferences" },
+    { name: "config", detail: "Ren'Py Configuration Options" },
+    { name: "build", detail: "Ren'Py Build Process Methods" },
+    { name: "gui", detail: "Ren'Py GUI Customization Variables" },
+    { name: "bubble", detail: "Ren'Py Speech Bubble Variables" },
 ] as const;
 
 export class NavigationData {
@@ -65,6 +65,7 @@ export class NavigationData {
     static internalAutoComplete: CompletionItem[];
     static preferencesAutoComplete: CompletionItem[];
     static bubbleAutoComplete: CompletionItem[];
+    static buildAutoComplete: CompletionItem[];
     static displayableAutoComplete: CompletionItem[];
     static displayableQuotedAutoComplete: CompletionItem[];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -149,6 +150,7 @@ export class NavigationData {
         NavigationData.preferencesAutoComplete = [];
         NavigationData.bubbleAutoComplete = [];
         NavigationData.internalAutoComplete = [];
+        NavigationData.buildAutoComplete = [];
         for (const [key, value] of Object.entries(NavigationData.renpyFunctions.internal)) {
             if (typeof value === "string") {
                 continue;
@@ -163,6 +165,8 @@ export class NavigationData {
                 NavigationData.preferencesAutoComplete.push(NavigationData.makeCompletionItem(key.substring(12), value));
             } else if (key.startsWith("bubble.")) {
                 NavigationData.bubbleAutoComplete.push(NavigationData.makeCompletionItem(key.substring(7), value));
+            } else if (key.startsWith("build.")) {
+                NavigationData.buildAutoComplete.push(NavigationData.makeCompletionItem(key.substring(6), value));
             }
         }
 
@@ -1231,10 +1235,9 @@ export function getDefaultStoreVariables(): CompletionItem[] {
 
     // Push the default renpy namespaces so users get actual intellisense
     for (const ns of Namespaces) {
-        const trueName = ns.name.substring(0, ns.name.length - 1);
-        if (!addedKeys.has(trueName)) {
-            addedKeys.add(trueName);
-            const item = new CompletionItem(trueName, CompletionItemKind.Module);
+        if (!addedKeys.has(ns.name)) {
+            addedKeys.add(ns.name);
+            const item = new CompletionItem(ns.name, CompletionItemKind.Module);
             item.detail = ns.detail;
             newList.push(item);
         }
