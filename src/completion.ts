@@ -88,17 +88,14 @@ export function getCompletionList(document: TextDocument, position: Position, co
         } else if (linePrefix.endsWith("renpy.audio.")) {
             return getAutoCompleteList("renpy.audio.");
         } else if (linePrefix.endsWith("persistent.")) {
-            const prefixPosition = new Position(position.line, position.character - 1);
-            const range = document.getWordRangeAtPosition(prefixPosition);
-            const parentContext = getCurrentContext(document, position);
-
-            if (range) {
-                const parentPosition = new Position(position.line, line.length - line.trimStart().length);
-                const parent = document.getText(document.getWordRangeAtPosition(parentPosition));
-                const kwPrefix = document.getText(range);
-
-                return getAutoCompleteList(kwPrefix, parent, parentContext);
+            const newList: CompletionItem[] = [];
+            const directObjects = NavigationData.data.location["persistent"];
+            for (const key in directObjects) {
+                newList.push(new CompletionItem(key, CompletionItemKind.Value));
             }
+            newList.push(new CompletionItem("_clear", CompletionItemKind.Method));
+            newList.push(new CompletionItem("_hasattr", CompletionItemKind.Method));
+            return newList;
         }
         // This part will have to handle:
         // - rentale. lookup (i.e. rentale.(Show immediate rentale callables & variables + classes found under rentale.))
@@ -196,17 +193,6 @@ export function getAutoCompleteList(prefix: string, parent = "", context = ""): 
                 newList.push(new CompletionItem(item.label.replace(cleanPrefix, ""), item.kind));
             }
         }
-        return newList;
-    }
-
-    // Persistent store variables
-    else if (prefix === "persistent") {
-        const directObjects = NavigationData.data.location["persistent"];
-        for (const key in directObjects) {
-            newList.push(new CompletionItem(key, CompletionItemKind.Value));
-        }
-        newList.push(new CompletionItem("_clear", CompletionItemKind.Method));
-        newList.push(new CompletionItem("_hasattr", CompletionItemKind.Method));
         return newList;
     }
 
