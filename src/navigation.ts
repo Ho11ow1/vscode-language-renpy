@@ -51,8 +51,12 @@ export class DataType {
 
         if (baseClass === "True" || baseClass === "False" || cleanBase === "bool") {
             this.type = "bool";
-        } else if (!isNaN(+this.baseClass) || cleanBase === "int" || cleanBase === "float") {
-            this.type = "int";
+        } else if (!isNaN(+this.baseClass)) {
+            if (this.baseClass.includes(".")) {
+                this.type = "float";
+            } else {
+                this.type = "int";
+            }
         } else if (baseClass === "_" || baseClass.startsWith('"') || baseClass.startsWith("`") || baseClass.startsWith("'") || cleanBase === "str") {
             this.type = "str";
         } else if (baseClass.startsWith("[") || cleanBase === "list") {

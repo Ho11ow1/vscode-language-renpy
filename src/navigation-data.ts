@@ -15,6 +15,7 @@ import {
 
 import { cleanUpPath, extractFilenameWithoutExtension, getFileWithPath, getNavigationJsonFilepath, stripWorkspaceFromFile } from "src/utilities";
 
+import { UpdateList } from "./utilities/vscode-completion-util";
 import { Character } from "./character";
 import { Displayable } from "./displayable";
 import { getDefinitionFromFile } from "./hover";
@@ -202,6 +203,7 @@ export class NavigationData {
             NavigationData.gameObjects["channels"] = {};
             NavigationData.gameObjects["properties"] = {};
             NavigationData.gameObjects["fields"] = {};
+            NavigationData.gameObjects["field_types"] = {};
             NavigationData.gameObjects["define_types"] = {};
             NavigationData.gameObjects["semantic"] = {};
             NavigationData.gameObjects["audio"] = {};
@@ -1237,9 +1239,7 @@ export function getDefaultStoreVariables(): CompletionItem[] {
     for (const ns of Namespaces) {
         if (!addedKeys.has(ns.name)) {
             addedKeys.add(ns.name);
-            const item = new CompletionItem(ns.name, CompletionItemKind.Module);
-            item.detail = ns.detail;
-            newList.push(item);
+            UpdateList(newList, ns.name, CompletionItemKind.Module, ns.detail);
         }
     }
 
@@ -1249,7 +1249,7 @@ export function getDefaultStoreVariables(): CompletionItem[] {
         for (const key of Object.keys(callables)) {
             if (!key.includes(".") && !addedKeys.has(key)) {
                 addedKeys.add(key);
-                newList.push(new CompletionItem(key, CompletionItemKind.Function));
+                UpdateList(newList, key, CompletionItemKind.Function);
             }
         }
     }
@@ -1260,7 +1260,7 @@ export function getDefaultStoreVariables(): CompletionItem[] {
         for (const key of Object.keys(classes)) {
             if (!key.includes(".") && !addedKeys.has(key)) {
                 addedKeys.add(key);
-                newList.push(new CompletionItem(key, CompletionItemKind.Class));
+                UpdateList(newList, key, CompletionItemKind.Class);
             }
         }
     }
@@ -1271,7 +1271,7 @@ export function getDefaultStoreVariables(): CompletionItem[] {
         for (const key of Object.keys(defaults)) {
             if (!key.includes(".")) {
                 addedKeys.add(key);
-                newList.push(new CompletionItem(key, CompletionItemKind.Variable));
+                UpdateList(newList, key, CompletionItemKind.Variable);
             }
         }
     }
@@ -1282,7 +1282,7 @@ export function getDefaultStoreVariables(): CompletionItem[] {
         for (const key of Object.keys(defines)) {
             if (!key.includes(".") && !addedKeys.has(key)) {
                 addedKeys.add(key);
-                newList.push(new CompletionItem(key, CompletionItemKind.Variable));
+                UpdateList(newList, key, CompletionItemKind.Variable);
             }
         }
     }
