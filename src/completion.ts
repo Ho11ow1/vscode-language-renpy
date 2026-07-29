@@ -114,22 +114,22 @@ export function getCompletionList(document: TextDocument, position: Position, co
                 return getAutoCompleteList(kwPrefix, parent, parentContext);
             }
             // Pretty sure this doesn't do anything but leave it here just in case i'm missing it
-            // else if (
-            //     context.triggerCharacter === "-" ||
-            //     context.triggerCharacter === "@" ||
-            //     context.triggerCharacter === "=" ||
-            //     context.triggerCharacter === " "
-            // ) {
-            //     const parentPosition = new Position(position.line, line.length - line.trimStart().length);
-            //     const parent = document.getText(document.getWordRangeAtPosition(parentPosition));
-            //     if (parent) {
-            //         if (context.triggerCharacter === "=") {
-            //             return getAutoCompleteList(parent);
-            //         } else {
-            //             return getAutoCompleteList(context.triggerCharacter, parent, parentContext);
-            //         }
-            //     }
-            // }
+            else if (
+                context.triggerCharacter === "-" ||
+                context.triggerCharacter === "@" ||
+                context.triggerCharacter === "=" ||
+                context.triggerCharacter === " "
+            ) {
+                const parentPosition = new Position(position.line, line.length - line.trimStart().length);
+                const parent = document.getText(document.getWordRangeAtPosition(parentPosition));
+                if (parent) {
+                    if (context.triggerCharacter === "=") {
+                        return getAutoCompleteList(parent);
+                    } else {
+                        return getAutoCompleteList(context.triggerCharacter, parent, parentContext);
+                    }
+                }
+            }
         }
     }
     return undefined;
